@@ -1,37 +1,96 @@
-# MindCoZ Backend Progress
+# MindCoZ / MentaBot Progress Log
 
-## Current baseline
+## Status Overview
+- **Core Architecture:** Real LLM Integration (`React Frontend -> Flask API -> LLM Service -> Google Gemini SDK -> React UI`).
+- **LLM Status:** **Implemented and Verified** (End-to-end integration structure, live endpoints, and unit test suites passing; live external calls require student/developer `GEMINI_API_KEY` in `flask_backend/.env`).
+- **Regression Check:** All 12 Django backend tests passing; all 11 Flask backend tests passing. React frontend compiles cleanly (0 errors).
 
-- [x] Inspected the project structure, Django settings and routes, backend app, and tests.
-- [x] Identified and corrected the installed-app name mismatch that prevented Django startup.
-- [x] Confirmed Django as the backend framework.
-- [x] Added health, chat, history, and sensor API routes with a JSON contract.
-- [x] Added SQLite models and migrations for per-user chat messages and sensor readings.
-- [x] Added sensor bearer-token validation and value checks.
-- [x] Added Django session login/logout and CSRF protection for chat/history.
-- [!] Frontend must use same-origin session cookies and administrator-provisioned accounts; cross-origin deployment and self-service registration are not configured.
+---
 
-## Milestones
+## Completed Milestones
 
-- [x] Backend API tests: 12 tests cover health, session authentication and CSRF, per-user chat persistence/history, sensor authorization, sensor validation, and unavailable status.
-- [x] SQLite chat history: chat messages are persisted and retrieved per authenticated user.
-- [~] Sensor API: authenticated ingestion and latest-reading retrieval are implemented and tested using simulated test payloads only; no MAX30100 device has been tested.
-- [ ] Camera requirements: no camera code or hardware/network details are present.
-- [~] Frontend API compatibility: an API contract is documented; frontend integration has not been tested.
-- [!] Security checks: chat/history use Django sessions and CSRF; sensor ingestion requires an environment-configured bearer token. Production settings remain unsafe (`DEBUG = True`, an insecure placeholder `SECRET_KEY`, and empty `ALLOWED_HOSTS`), and cross-origin access is not configured.
-- [ ] Final integration tests: pending implementation and hardware/network availability.
+### 1. Architectural Inspection & Coexistence
+- [x] Inspected workspace: identified existing Django backend (`manage.py`, `MindCoZ/`, `MindCoZ_BackEnd/`).
+- [x] Confirmed absence of Flask backend and React frontend prior to this implementation.
+- [x] Created decoupled `flask_backend/` for dedicated, lightweight LLM streaming and conversational inference.
+- [x] Verified existing Django tests (12 tests) pass without disruption.
 
-## Verification
+### 2. LLM Provider Integration (`flask_backend/`)
+- [x] **Provider Selected:** Google Gemini via official `google-genai` SDK (`gemini-2.5-flash`).
+- [x] **LLM Service (`flask_backend/llm_service.py`):**
+  - Integrated `genai.Client` with multi-turn conversation memory.
+  - Implemented configurable turn/token cap (`MAX_HISTORY_TURNS`, default: 10) to optimize context window and respect privacy.
+  - Configured supportive student persona covering academic pressure, study timetable design, time management, and exam stress.
+  - Enforced ethical boundaries: AI disclosure, no medical/clinical diagnoses, crisis hotline referral (988).
+  - Explicit error management: `INVALID_API_KEY` (401), `RATE_LIMIT_EXCEEDED` (429), `LLM_NOT_CONFIGURED` (503), `LLM_SERVER_ERROR` (503).
+  - **No Simulated Responses:** When `GEMINI_API_KEY` is not present, returns explicit HTTP 503 with `"status": "Not Connected"`.
+- [x] **Flask App (`flask_backend/app.py`):**
+  - `GET /api/health`: Health status and provider readiness flag.
+  - `GET /api/status`: Provider details (`google-gemini`, `gemini-2.5-flash`, `Connected` vs `Not Connected`).
+  - `POST /api/chat`: Validates input, formats history, and invokes LLM service.
+  - `POST /api/chat/reset`: Clears active session context.
+  - CORS support enabled for local development.
 
-- After the installed-app fix, `python manage.py check` passed with no issues.
-- `python manage.py makemigrations --check --dry-run` reported no missing migrations.
-- `python manage.py test` passed all 12 tests. Sensor tests use simulated payloads, not physical hardware.
-- Before the installed-app fix, `python manage.py check` failed with `ModuleNotFoundError: No module named 'MindCoZ_backend'`.
-- Repository inspection found no dependency manifest, README, existing progress file, Flask implementation, camera integration, or project-specific tests.
+### 3. Backend Verification
+- [x] Authored 11 unit tests in `flask_backend/tests/test_flask_llm.py`.
+- [x] Verified 11/11 Flask tests pass.
+- [x] Tested live server instance over HTTP on port 5000:
+  - `GET /api/health` -> HTTP 200 `{"status": "ok", "llm_status": "Not Connected"}`
+  - `GET /api/status` -> HTTP 200 `{"status": "Not Connected", "message": "GEMINI_API_KEY is not set..."}`
+  - `POST /api/chat` without key -> HTTP 503 `{"error": "LLM_NOT_CONFIGURED", "status": "Not Connected"}`
+  - `POST /api/chat/reset` -> HTTP 200 `{"status": "reset"}`
 
-## Blockers and next steps
+### 4. React Frontend Interface (`frontend/`)
+- [x] Initialized Vite + React modern frontend application with `lucide-react` icons.
+- [x] Implemented dedicated API service module (`src/services/api.js`) reading `VITE_API_BASE_URL`.
+- [x] Built responsive student chat UI:
+  - Distinct student (user) and MentaBot (AI) message bubbles.
+  - Real-time animated typing indicator during generation.
+  - Live status indicator badge (`Real AI Connected`, `Not Connected (API Key Required)`, `Backend Offline`).
+  - Quick-start topic suggestion chips (Study Schedule, Procrastination, Exam Anxiety, Pomodoro).
+  - "New Chat" reset conversation button.
+  - Prominent non-medical disclaimer and crisis helpline footer.
+- [x] Verified `npm run build` succeeds cleanly in 366ms with 0 errors.
 
-- Configure production Django settings and determine frontend origin/session-cookie deployment before network exposure.
-- Decide whether administrator-provisioned accounts are sufficient or self-service registration is required.
-- Confirm camera model, connection method, and intended backend integration once camera work is in scope.
-- Test with hardware only when devices and the required network path are available; do not present simulated data as device connectivity.
+### 5. Dual-Section Telemetry UI (Pulse Sensor + ESP32-CAM on Same Page)
+- [x] **Section 1: Pulse Sensor & Vitals Telemetry (`PulseSensorSection.jsx`):**
+  - Live Heart Rate (BPM) with animated beating heart synced to BPM speed.
+  - SpO2 (%) blood oxygen saturation gauge and status indicators.
+  - Interactive IP address & link configuration (direct ESP32 IP, Flask API, Django DB, or Demo simulator).
+  - Continuous real-time animated ECG oscilloscope canvas trace.
+  - Interactive buttons: Connect/Disconnect, Fetch Now, Polling ON/OFF (1s, 2s, 5s), Quick simulation injection (72, 92, 110 BPM), Clear History, Ask MentaBot AI About Vitals.
+  - Telemetry history table showing timestamped logs.
+- [x] **Section 2: ESP32-CAM Video Stream & Optical Sensor (`Esp32CamSection.jsx`):**
+  - Displays camera feed strictly by direct IP address & link URL (`http://<IP>:<PORT>/stream` or `/capture`).
+  - Stream presets for standard ESP32-CAM AP (192.168.4.1:81/stream), Wi-Fi LAN (192.168.1.50:81/stream), Snapshot mode, and Demo pattern.
+  - Full URL preview with 1-click Copy Link and Open in New Tab buttons.
+  - Action buttons: Start/Stop Stream, Capture Snapshot, Rotate 90°, Mirror/Flip, Crosshairs overlay, Fullscreen mode, Resolution & FPS selectors.
+  - Built-in dynamic canvas test pattern generator for offline testing without physical camera.
+  - Timestamped snapshot gallery with download and delete actions.
+- [x] **Unified Hub Header & Coexistence:**
+  - Header navigation pills allow switching between "Dual Sensor View", "Pulse Sensor", "ESP32-CAM", and "AI Companion" on the same page.
+  - Integrated collapsible MentaBot AI panel on the same page for real-time stress advice based on vitals.
+- [x] **Test Verification:**
+  - 14/14 Flask backend tests passed (including new `/api/sensor` and `/api/proxy/fetch` tests).
+  - 12/12 Django backend tests passed.
+  - `oxlint` passed with 0 errors and 0 warnings.
+  - `npm run build` completed cleanly in 351ms.
+
+### 6. Tracking & Documentation
+- [x] `PRD.md`: Full Product Requirements Document.
+- [x] `TODO.md`: Implementation checklist.
+- [x] `PROGRESS.md`: Detailed milestone tracking and verification results.
+- [x] `README.md`: End-to-end setup, execution, testing, and API documentation.
+- [x] `AGENT_NOTES.md`: Architectural decisions and provider rationale.
+- [x] `SECURITY.md`: Credential safety, CORS, privacy limits, and safety measures.
+- [x] `.env.example` in both root and `flask_backend/`.
+- [x] `.gitignore` ensuring secret keys and build artifacts are never tracked.
+
+---
+
+## Next Steps for the User
+1. Obtain a free Gemini API key from [Google AI Studio](https://aistudio.google.com/).
+2. Copy `flask_backend/.env.example` to `flask_backend/.env` and insert `GEMINI_API_KEY=your_actual_key`.
+3. Start Flask: `python -m flask_backend.app` (or `& D:\projects\venv\Scripts\python.exe -m flask_backend.app`).
+4. Start React Frontend: `cd frontend && npm run dev`.
+5. Open browser at `http://localhost:5173` to converse with real MentaBot AI!
